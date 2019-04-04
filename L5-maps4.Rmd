@@ -1,0 +1,54 @@
+---
+title: "L5-maps4"
+author: "wj107"
+date: "April 4, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Maps, part 4
+
+Per usual, last time I had grand goals, but only made it about two or three steps in.  Whatever.  I was grinding, figuring out some stuff... and made a decently cool map at the end, form KML data found online!  
+
+```{r chicago_base_map, echo=FALSE}
+
+#---create precinct boundary R object
+precinct.boundaries<-
+    #----load KML data
+    getKMLcoordinates(
+        #---load my desired KML file
+        "Chicago_Precincts.kml",
+        #---ignore altitude... I'm dealing with 2D data!!
+        ignoreAltitude=TRUE
+    )
+
+#---reassign precinct boundary
+precinct.boundaries<-
+    #---for each of the polygons in the boundary data...
+    lapply(precinct.boundaries,
+          #---...convert it to its own data frame
+           as.data.frame
+          )
+
+#---reassign precinct boundary data
+precinct.boundaries<-
+    #---bind each of the polygons into one big data frame
+    bind_rows(precinct.boundaries,
+            #---distinguish each polygon!
+            .id="polygon"
+    )
+
+#---rename columns...
+names(precinct.boundaries)<-c("precinct","long","lat")
+
+
+
+```
+
+I mentioned my next goal:  get a cool background to the map, using `ggmap`.  But, since Google required registration to use `ggmap`, I needed to shift to my desktop computer (I was on a chromebook) to get situated with `ggmap`.  But, in the process, I realized that my desktop wasn't ready to mess with KML data right away.  I needed to get some extra packages installed.
+
+First, `rdgal`.  But, I kept getting an error message: `configure: error: gdal-config not found or not executable.`  Hmmm.  [Stack overflow tells me that it's because there's *development* packages for geospatial data in Linux that I'm missing.](https://stackoverflow.com/a/12143411)  (My desktop computer runs on Linux)  Ran `apt-cache search libgdal` in `bash`, found and installed the packages, and got `rgdal` running in R.  Hat tip to [Dirk EddelBuettel](https://stackoverflow.com/users/143305/dirk-eddelbuettel) for the advice.  You know, I've come across his name various times looking for R help.  I get the sense he knows what's up.
+

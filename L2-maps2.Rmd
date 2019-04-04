@@ -1,0 +1,234 @@
+---
+title: "L2-maps2"
+author: "wj107"
+date: "April 2, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Learning maps in R, part 2
+
+So last time I ambitiously got a data frame with the 1000 most populous cities in the US, thinking I would be constructing all sorts of maps from it.  Then I got distracted by drawing "goofy" state maps, and messed around with that for awhile.
+
+What I hoped to be doing, last time:
+
+```{r last_time1, echo=F}
+
+#---what I hoped to be doing, last time
+require(jsonlite,quietly=T)
+fromJSON("data/cities.json")->dat
+head(dat)
+
+```
+
+What I ended up doing, instead:
+
+```{r last_time2, echo=F}
+
+#---what I really ended up doing...
+require(ggplot2,quietly=T)
+
+#---state boundary
+IL<-subset(
+    map_data("state"),
+    region=="illinois"
+)
+
+#---resize plots
+options(
+    repr.plot.width=4, 
+    repr.plot.height=3
+)
+
+#---silly graphs!!
+ggplot(
+    IL,
+    aes(x=long,y=lat)
+)+
+geom_line()+
+coord_fixed()
+
+
+#---silly graphs!!
+ggplot(
+    IL[sample(nrow(IL)),],
+    aes(x=long,y=lat)
+)+
+geom_path()+
+coord_fixed()
+```
+
+### USA counties
+
+Turns out that I tried making some more of these goofy "spaghetti" maps.  They're fun -- but soon I pulled myself away from that to wonder about the `map_data` function.  What other data did I have available?
+
+Turns out I can dig deeper and get county-level boundary data for the US: `map_data("county")`.  So, I thought -- maybe I can create a geography quiz -- I highlight one of these US counties, at random, and then the county name can be displayed.  It'll give me practice working with the maps:  plotting them, and highlighting one region at random.  And then, making it all interactive will get me experimenting with a [shiny app](https://www.shinyapps.io/) -- something I tried about a year ago, but I want to re-aquaint myself with.
+
+Goal set:  county-level USA data, maps with highlighted counties, and then a shiny app to tie it all together.  First, plotting a county map for any given state.
+
+```{r IL_county}
+#---get USA county-level data
+dat<-map_data("county")
+
+#---focus on just illinois
+IL<-subset(dat,region=="illinois")
+
+#---create IL county map
+IL.county<-
+  #---use ggplot!!
+  ggplot(
+    #---Illinois county boundaries
+    data=IL,
+    #---aesthetics
+    aes(
+        #---long and lat
+        x=long,
+        y=lat,
+        #---group county boundaries together
+        group=subregion
+    )    
+)+
+
+#---add geometry -- polygons!!
+geom_polygon(
+    #---set line color
+    color="black",
+    #---set fill color
+    fill="grey79"
+)+
+
+#---aspect ratio!!!
+coord_fixed()
+
+#---PLOT!!
+IL.county
+
+```
+
+Not bad!  Two things: 
+- Don't need the labels on the axes,
+- Need to change the fill color for a random county
+
+For the first point, I've done enough `ggplot`, apart from maps, to know how to get at labels: `xlab(NULL)` for the axis titles, and `scale_x_continuous(breaks=NULL)` for the numbers.
+
+```{r IL_county2}
+
+#---update IL county map
+IL.county<-
+  #---start with what I mapped before
+  IL.county+
+  
+  #---get rid of axis titles!
+  xlab(NULL)+
+  ylab(NULL)+
+
+  #---get rid of numbers on the axes!!
+  scale_x_continuous(breaks=NULL)+
+  scale_y_continuous(breaks=NULL)
+
+#---PLOT!!!
+IL.county
+
+```
+
+Okay!  The fill is a bit trickier.  First step, pick a random county to highlight.  Ok -- make a list of the county names, then pick one at random using `sample`.  What next??
+
+I figured I'd create an 'identifier' vector that returns `TRUE` for all points on the boundary of the random county, and `FALSE` otherwise.  Add this identifier to the data frame, and then, `ggplot` would know from this identifier, how to distinguish colors when creating the map.
+
+Note that since I re to re-define the data, I have to build the map back up from the start -- I can just add to `IL.county` like I did before.
+
+```{r IL_county3}
+
+#---find all county names
+county.names<-unique(IL$subregion)
+#---pick one at random
+random.county<-sample(county.names,1)
+
+#---create identifier vector... simple logical test
+county.identifier<-IL$subregion==random.county
+#---add identifier to data frame
+IL<-data.frame(IL,county.identifier)
+
+#---create IL county map, using identifier to distinguish color
+IL.county2<-
+  #---ggplot!!
+  ggplot(
+    #---Illinois county boundaries
+    data=IL,
+    #---aesthetics
+    aes(
+        #---long and lat
+        x=long,
+        y=lat,
+        #---group county boundaries together
+        group=subregion
+    )    
+)+
+
+#---add geometry -- polygons!!
+geom_polygon(
+    #---set line color
+    color="black",
+    #---FILL COLOR DISTINGUISHED BY COUNTY IDENTIFIER!!!
+    aes(fill=county.identifier)
+)+
+
+#---aspect ratio!!!
+coord_fixed()+
+
+#---get rid of axis titles!
+xlab(NULL)+
+ylab(NULL)+
+
+#---get rid of numbers on the axes!!
+scale_x_continuous(breaks=NULL)+
+scale_y_continuous(breaks=NULL)
+
+
+#---PLOT!!!
+
+IL.county2
+
+```
+
+Ok!  A couple things:  
+
+- There's no need for a legend.  `guide=NULL` will take care of that, I believe (why does `ggplot` call them guides?  Doesn't it talk about legends too?  Which is which for `ggplot`??)
+- I would want to explicitly state what color goes with which type of dot.  I figure if I'm trying to draw attention to the random county, I'd need a bright color for all the `TRUE` dots.  Then a nice muted grey for the `FALSE` ones.  `scale_color_manual` would let me do that.
+
+Since I'm not starting from scratch -- I just need to add the `guide` and `scale_color_manual` to the previous map, I can just add onto `IL.county2` from before.
+
+```{r IL_county4}
+
+#---update IL.county2
+IL.county2<-
+  #---start with previous map
+  IL.county2+
+  
+  #---scale for fill allows custom setting of colors
+  scale_fill_manual(
+    #---values is a named vector -- level and color.
+    values=(
+        c(
+        "TRUE"="red",
+        "FALSE"="grey79"
+        )
+    )
+  )+
+
+  #---no guide, err, legend, for fill
+  guides(fill="none")
+
+#---PLOT!!!
+IL.county2
+
+```
+
+Ok!  A nice map!  But the interactivity of a shiny app would really make this sing.  I really had to wrestle with the basics of getting a shiny app working -- even though I made two very basic app's last year.
+
+This notebook is for maps, so I'll try to document the shiny app process in new notebook.  These are going to keep on accumulating...   (but so will my coding skills!!)
+
+[SCRIPT FOR HIGHLIGHTED COUNTY MAP FROM THIS SESSION](https://github.com/wj107/Learning/scripts/L2-highlighted_county.R)
